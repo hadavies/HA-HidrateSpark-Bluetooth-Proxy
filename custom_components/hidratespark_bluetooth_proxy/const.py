@@ -10,9 +10,11 @@ DOMAIN: Final = "hidratespark_bluetooth_proxy"
 CONF_ADDRESS: Final = "address"
 CONF_SIZE_ML: Final = "size_ml"
 CONF_NAME_PREFIX: Final = "name_prefix"
+CONF_MODEL: Final = "model"
 
 DEFAULT_SIZE_ML: Final = 591
 DEFAULT_NAME_PREFIX: Final = "h2o"
+DEFAULT_MODEL: Final = "other"
 
 # Reconnect tuning
 RECONNECT_BACKOFF_INITIAL: Final = 1.0
@@ -55,14 +57,43 @@ DRAIN_BYTE: Final = bytes([0x57])
 # samples within RAW_STABLE_TOLERANCE. Transient frames while the bottle is moved
 # never form a streak, so they are filtered without needing a magic byte.
 RAW_STABLE_TOLERANCE: Final = 4  # u16 units; settled jitter is ~±1-2
-# Raw-units-per-mL scale for converting a weight delta into a volume. Measured
-# from a full+empty calibration on a 946 mL bottle: full u16 = 37115, empty
-# u16 = 35880, so 1235 raw units span 946 mL = ~1.305 raw/mL. This is a load-cell
-# property, so it should hold across bottle sizes on the same puck.
+# Raw-units-per-mL scale for converting a weight delta into a volume. Generic
+# fallback / seed only — the real value is a property of the specific sensor
+# puck and is selected per-model and refined per-puck by auto-calibration (see
+# MODELS and BottleState). Measured value 1.305 came from a full+empty
+# calibration on a 946 mL PRO 32oz bottle (full u16 37115, empty 35880, 1235
+# raw units over 946 mL).
 RAW_UNITS_PER_ML: Final = 1.305
 # A jump of this many u16 units across a cap open/close means the bottle was
 # refilled (~30 mL at the scale above) rather than just opened to drink.
 REFILL_MIN_DELTA_RAW: Final = 60
+
+# Per-model weight-sensor calibration. The raw-per-mL scale belongs to the
+# sensor puck, which differs by bottle width-family and generation: the 32oz
+# PRO puck is physically larger than the 17/21oz one (3.82" vs 2.76" base), the
+# 24oz is a different (Tritan) body, and the PRO 2 generation has a new sensor.
+# So a single constant can't be right for every bottle. Each model seeds a
+# default scale and bottle size; only `measured` values have been confirmed on
+# real hardware. Unmeasured seeds are best-effort and self-correct via the sip
+# auto-calibration, so they only affect readings before enough has been drunk.
+MODELS: Final[dict[str, dict]] = {
+    "pro_32oz": {"label": "HidrateSpark PRO 32oz", "size_ml": 946, "raw_per_ml": 1.305, "measured": True},
+    "pro_24oz": {"label": "HidrateSpark PRO 24oz", "size_ml": 710, "raw_per_ml": 1.305, "measured": False},
+    "pro_21oz": {"label": "HidrateSpark PRO 21oz", "size_ml": 621, "raw_per_ml": 1.305, "measured": False},
+    "pro_17oz": {"label": "HidrateSpark PRO 17oz", "size_ml": 503, "raw_per_ml": 1.305, "measured": False},
+    "pro2": {"label": "HidrateSpark PRO 2", "size_ml": 621, "raw_per_ml": 1.305, "measured": False},
+    "other": {"label": "Other / unknown (custom size)", "size_ml": DEFAULT_SIZE_ML, "raw_per_ml": 1.305, "measured": False},
+}
+
+# Sip-based auto-calibration of the raw-per-mL scale. Each sip carries a known
+# mL (from the bottle's own sip records, independent of weight), so the ratio of
+# the cumulative settled-weight drop to the cumulative sip volume since the last
+# refill yields the puck's true scale. Only trust a sample once enough has been
+# drunk for a clean signal; smooth it in and clamp to sane physical bounds.
+CALIBRATION_MIN_ML: Final = 250
+CALIBRATION_EMA_ALPHA: Final = 0.3
+RAW_PER_ML_MIN: Final = 0.4
+RAW_PER_ML_MAX: Final = 4.0
 
 # 13-step handshake from HydroSync. Each tuple is (target_char, hex_payload).
 # Writes are 50 ms apart.

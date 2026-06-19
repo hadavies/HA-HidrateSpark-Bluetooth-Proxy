@@ -65,6 +65,36 @@ class WeightCalibrationTest(unittest.TestCase):
         b.refill("cap_close", 37100)
         self.assertEqual(b.refills_today, 1, "a real refill increments the counter")
 
+    def test_model_seed_scale_is_used(self):
+        b = state.BottleState(HomeAssistant(), "e", 621, raw_per_ml=0.9)
+        self.assertEqual(b.raw_units_per_ml, 0.9)
+
+    def test_scale_auto_calibrates_from_sips(self):
+        # Seed a deliberately-wrong scale; the sip-vs-weight-drop auto-cal should
+        # pull it toward the puck's true scale (independent of the seed).
+        true_scale = 1.305
+        b = state.BottleState(HomeAssistant(), "e", 946, raw_per_ml=0.9)
+        anchor = 37000
+        b.update_fill_from_weight(anchor)  # bootstrap + open calib window
+        ts = 1000.0
+        for _ in range(10):
+            ts += 100
+            b.add_sip(state.Sip(timestamp=ts, volume_ml=300))  # known 300 mL
+            raw = anchor - round(300 * true_scale)  # real weight drop
+            b.update_fill_from_weight(raw)
+            # refill back to full -> resets the calibration window
+            ts += 100
+            b.refill("cap_close", anchor)
+            b.update_fill_from_weight(anchor)
+        self.assertAlmostEqual(b.raw_units_per_ml, true_scale, delta=0.05)
+
+    def test_no_calibration_before_enough_drunk(self):
+        b = state.BottleState(HomeAssistant(), "e", 946, raw_per_ml=0.9)
+        b.update_fill_from_weight(37000)
+        b.add_sip(state.Sip(timestamp=1000.0, volume_ml=50))  # below CALIBRATION_MIN_ML
+        b.update_fill_from_weight(37000 - round(50 * 1.305))
+        self.assertEqual(b.raw_units_per_ml, 0.9, "must not calibrate on a tiny sample")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

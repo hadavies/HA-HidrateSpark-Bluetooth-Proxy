@@ -10,11 +10,15 @@ from homeassistant.core import HomeAssistant
 
 from .const import (
     CONF_ADDRESS,
+    CONF_MODEL,
     CONF_NAME_PREFIX,
     CONF_SIZE_ML,
+    DEFAULT_MODEL,
     DEFAULT_NAME_PREFIX,
     DEFAULT_SIZE_ML,
     DOMAIN,
+    MODELS,
+    RAW_UNITS_PER_ML,
 )
 from .coordinator import HidrateSparkCoordinator
 
@@ -30,6 +34,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     size_ml: int = entry.options.get(
         CONF_SIZE_ML, entry.data.get(CONF_SIZE_ML, DEFAULT_SIZE_ML)
     )
+    model: str = entry.options.get(CONF_MODEL, DEFAULT_MODEL)
+    raw_per_ml: float = MODELS.get(model, {}).get("raw_per_ml", RAW_UNITS_PER_ML)
 
     coordinator = HidrateSparkCoordinator(
         hass=hass,
@@ -37,6 +43,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         address=address,
         name=name,
         size_ml=size_ml,
+        raw_per_ml=raw_per_ml,
     )
     await coordinator.async_start()
 

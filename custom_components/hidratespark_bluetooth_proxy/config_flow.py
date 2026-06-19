@@ -25,15 +25,41 @@ from homeassistant.core import callback
 from homeassistant.helpers import config_validation as cv
 
 from .const import (
+    CONF_MODEL,
     CONF_NAME_PREFIX,
     CONF_SIZE_ML,
+    DEFAULT_MODEL,
     DEFAULT_NAME_PREFIX,
     DEFAULT_SIZE_ML,
     DOMAIN,
+    MODELS,
     SERVICE_REF,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# {model_key: human label} for the setup dropdown.
+_MODEL_CHOICES = {key: spec["label"] for key, spec in MODELS.items()}
+
+
+def _resolve_size_ml(user_input: dict[str, Any]) -> int:
+    """Bottle size for the chosen model; the size field only applies to 'other'."""
+    model = user_input.get(CONF_MODEL, DEFAULT_MODEL)
+    spec = MODELS.get(model)
+    if model != "other" and spec:
+        return int(spec["size_ml"])
+    return int(user_input.get(CONF_SIZE_ML, DEFAULT_SIZE_ML))
+
+
+def _setup_fields(default_model: str = DEFAULT_MODEL, default_size: int = DEFAULT_SIZE_ML) -> dict:
+    """Model + size fields shared by the setup and options forms. The model sets
+    the calibration scale (and the size, except for 'Other' where size is used)."""
+    return {
+        vol.Required(CONF_MODEL, default=default_model): vol.In(_MODEL_CHOICES),
+        vol.Required(CONF_SIZE_ML, default=default_size): vol.All(
+            cv.positive_int, vol.Range(min=100, max=2000)
+        ),
+    }
 
 
 def _looks_like_bottle(info: BluetoothServiceInfoBleak) -> bool:
@@ -81,20 +107,17 @@ class HidrateSparkConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_ADDRESS: self._discovery_info.address,
                     CONF_NAME_PREFIX: DEFAULT_NAME_PREFIX,
                 },
-                options={CONF_SIZE_ML: user_input.get(CONF_SIZE_ML, DEFAULT_SIZE_ML)},
+                options={
+                    CONF_MODEL: user_input.get(CONF_MODEL, DEFAULT_MODEL),
+                    CONF_SIZE_ML: _resolve_size_ml(user_input),
+                },
             )
         return self.async_show_form(
             step_id="bluetooth_confirm",
             description_placeholders={
                 "name": self._discovery_info.name or self._discovery_info.address,
             },
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_SIZE_ML, default=DEFAULT_SIZE_ML): vol.All(
-                        cv.positive_int, vol.Range(min=100, max=2000)
-                    ),
-                }
-            ),
+            data_schema=vol.Schema(_setup_fields()),
         )
 
     # ---------------------------------------------------------------- user flow
@@ -114,7 +137,10 @@ class HidrateSparkConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_ADDRESS: address,
                     CONF_NAME_PREFIX: DEFAULT_NAME_PREFIX,
                 },
-                options={CONF_SIZE_ML: user_input.get(CONF_SIZE_ML, DEFAULT_SIZE_ML)},
+                options={
+                    CONF_MODEL: user_input.get(CONF_MODEL, DEFAULT_MODEL),
+                    CONF_SIZE_ML: _resolve_size_ml(user_input),
+                },
             )
 
         # Build a picker from currently-advertising candidates.
@@ -132,25 +158,14 @@ class HidrateSparkConfigFlow(ConfigFlow, domain=DOMAIN):
                 addr: f"{(info.name or addr)} ({addr})"
                 for addr, info in self._discovered.items()
             }
-            schema = vol.Schema(
-                {
-                    vol.Required(CONF_ADDRESS): vol.In(choices),
-                    vol.Required(CONF_SIZE_ML, default=DEFAULT_SIZE_ML): vol.All(
-                        cv.positive_int, vol.Range(min=100, max=2000)
-                    ),
-                }
-            )
+            address_field: dict = {vol.Required(CONF_ADDRESS): vol.In(choices)}
         else:
-            schema = vol.Schema(
-                {
-                    vol.Required(CONF_ADDRESS): str,
-                    vol.Required(CONF_SIZE_ML, default=DEFAULT_SIZE_ML): vol.All(
-                        cv.positive_int, vol.Range(min=100, max=2000)
-                    ),
-                }
-            )
+            address_field = {vol.Required(CONF_ADDRESS): str}
 
-        return self.async_show_form(step_id="user", data_schema=schema)
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema({**address_field, **_setup_fields()}),
+        )
 
     # ----------------------------------------------------------------- options
 
@@ -161,23 +176,25 @@ class HidrateSparkConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class HidrateSparkOptionsFlow(OptionsFlow):
-    """Allow the bottle size to be tuned after setup."""
+    """Allow the bottle model and size to be changed after setup."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
-        current = self.config_entry.options.get(
+            return self.async_create_entry(
+                title="",
+                data={
+                    CONF_MODEL: user_input.get(CONF_MODEL, DEFAULT_MODEL),
+                    CONF_SIZE_ML: _resolve_size_ml(user_input),
+                },
+            )
+        opts = self.config_entry.options
+        current_model = opts.get(CONF_MODEL, DEFAULT_MODEL)
+        current_size = opts.get(
             CONF_SIZE_ML, self.config_entry.data.get(CONF_SIZE_ML, DEFAULT_SIZE_ML)
         )
         return self.async_show_form(
             step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_SIZE_ML, default=current): vol.All(
-                        cv.positive_int, vol.Range(min=100, max=2000)
-                    ),
-                }
-            ),
+            data_schema=vol.Schema(_setup_fields(current_model, current_size)),
         )
