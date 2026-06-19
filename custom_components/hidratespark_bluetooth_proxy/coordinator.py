@@ -19,7 +19,7 @@ from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .ble import BottleClient
-from .const import DOMAIN
+from .const import DOMAIN, RAW_UNITS_PER_ML
 from .state import BottleState, Sip
 
 _LOGGER = logging.getLogger(__name__)
@@ -37,12 +37,13 @@ class HidrateSparkCoordinator:
         address: str,
         name: str,
         size_ml: int,
+        raw_per_ml: float = RAW_UNITS_PER_ML,
     ) -> None:
         self.hass = hass
         self.entry = entry
         self.address = address.upper()
         self.name = name
-        self.state = BottleState(hass, entry.entry_id, size_ml)
+        self.state = BottleState(hass, entry.entry_id, size_ml, raw_per_ml)
 
         self._client: Optional[BottleClient] = None
         self._task: Optional[asyncio.Task] = None

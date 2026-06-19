@@ -7,14 +7,24 @@
         "description": "Choose a HidrateSpark bottle that's currently advertising, or enter its Bluetooth address manually. The bottle must be paired with the official app at least once before this will work.",
         "data": {
           "address": "Bottle",
+          "model": "Bottle model",
           "size_ml": "Bottle capacity (mL)"
+        },
+        "data_description": {
+          "model": "Sets the weight-sensor calibration for your bottle. Pick 'Other' to enter a custom capacity. The scale self-tunes from your sips over time.",
+          "size_ml": "Only used when the model is 'Other'."
         }
       },
       "bluetooth_confirm": {
         "title": "Add HidrateSpark",
         "description": "Set up {name}?",
         "data": {
+          "model": "Bottle model",
           "size_ml": "Bottle capacity (mL)"
+        },
+        "data_description": {
+          "model": "Sets the weight-sensor calibration for your bottle. Pick 'Other' to enter a custom capacity. The scale self-tunes from your sips over time.",
+          "size_ml": "Only used when the model is 'Other'."
         }
       }
     },
@@ -28,7 +38,12 @@
       "init": {
         "title": "HidrateSpark options",
         "data": {
+          "model": "Bottle model",
           "size_ml": "Bottle capacity (mL)"
+        },
+        "data_description": {
+          "model": "Sets the weight-sensor calibration for your bottle. Pick 'Other' to enter a custom capacity.",
+          "size_ml": "Only used when the model is 'Other'."
         }
       }
     }
