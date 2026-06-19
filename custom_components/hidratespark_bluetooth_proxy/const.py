@@ -45,6 +45,11 @@ CHAR_CAP: Final = CHAR_DEBUG
 # Drain command — single byte written to the data char to ack a sip record
 DRAIN_BYTE: Final = bytes([0x57])
 
+# Safety bound on the inline re-drain: if the bottle keeps re-sending the same
+# sip frame (firmware not popping the record), stop acking it after this many
+# consecutive identical frames to avoid an unbounded write loop.
+MAX_IDENTICAL_SIP_FRAMES: Final = 5
+
 # Weight encoding.
 # The weight characteristic streams a 16-bit big-endian value (high<<8 | low).
 # Earlier firmwares were assumed to put an orientation flag in the high byte and
